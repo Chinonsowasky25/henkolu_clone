@@ -2,13 +2,13 @@ name: CI/CD - Henkolu
 
 on:
   push:
-    branches: [master]
+    branches: [ "main" ]
   pull_request:
-    branches: [master]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
-  docker-ci-cd:
+  docker:
     runs-on: ubuntu-latest
 
     env:
