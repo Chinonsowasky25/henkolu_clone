@@ -12,7 +12,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      IMAGE_NAME: waskylala/demo-app:latest
+      IMAGE_NAME: waskylala/demo-app
+
 
     steps:
       - name: Checkout repository
@@ -31,33 +32,28 @@ jobs:
         id: vars
         run: echo "short_sha=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
 
-     - name: Set commit short SHA
-  id: vars
-  run: echo "short_sha=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
+      - name: Build Docker image
+        run: |
+          docker build -t $IMAGE_NAME:${{ steps.vars.outputs.short_sha }} .
 
-- name: Build Docker image
-  run: |
-    IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/demo-app  # Define image name with DockerHub username
-    docker build -t $IMAGE_NAME:${{ steps.vars.outputs.short_sha }} .
+      - name: Tag as latest if on main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker tag $IMAGE_NAME:${{ steps.vars.outputs.short_sha }} $IMAGE_NAME:latest
 
-- name: Tag as latest if on master
-  if: github.ref == 'refs/heads/master'
-  run: |
-    docker tag $IMAGE_NAME:${{ steps.vars.outputs.short_sha }} $IMAGE_NAME:latest
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.short_sha }}
+          severity: CRITICAL,HIGH
+          exit-code: 0  # Let the pipeline pass even if vulnerabilities are found
 
-- name: Scan image with Trivy
-  uses: aquasecurity/trivy-action@master
-  with:
-    image-ref: ${{ secrets.DOCKER_USERNAME }}/demo-app:${{ steps.vars.outputs.short_sha }}
-    severity: CRITICAL,HIGH
-    exit-code: 0  # Let the pipeline pass even if vulnerabilities are found
+      - name: Push image(s) to DockerHub
+        run: |
+          docker push $IMAGE_NAME:${{ steps.vars.outputs.short_sha }}
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            docker push $IMAGE_NAME:latest
+          fi
 
-- name: Push image(s) to DockerHub
-  run: |
-    docker push $IMAGE_NAME:${{ steps.vars.outputs.short_sha }}
-    if [ "${{ github.ref }}" == "refs/heads/master" ]; then
-      docker push $IMAGE_NAME:latest
-    fi
-
-- name: Cleanup Docker
-  run: docker system prune -af
+      - name: Cleanup Docker
+        run: docker system prune -af
